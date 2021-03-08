@@ -1,20 +1,28 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 import os
-import torch.utils.data
+import numpy as np
+import time
+from datetime import datetime
+import scipy.io
+from tqdm import tqdm
+
+import torch
 from torch import nn
 from torch.nn import DataParallel
-from datetime import datetime
+from torch.optim import lr_scheduler
+import torch.optim as optim
+from torchsummary import summary
+
 from config import BATCH_SIZE, SAVE_FREQ, RESUME, SAVE_DIR, TEST_FREQ, TOTAL_EPOCH, MODEL_PRE, GPU
 from config import CASIA_DATA_DIR, LFW_DATA_DIR
 from core import model
 from core.utils import init_log
 from dataloader.CASIA_Face_loader import CASIA_Face
 from dataloader.LFW_loader import LFW
-from torch.optim import lr_scheduler
-import torch.optim as optim
-import time
+
 from lfw_eval import parseList, evaluation_10_fold
-import numpy as np
-import scipy.io
+
 
 # gpu init
 gpu_list = ''
@@ -42,14 +50,14 @@ _print = logging.info
 # define trainloader and testloader
 trainset = CASIA_Face(root=CASIA_DATA_DIR)
 trainloader = torch.utils.data.DataLoader(trainset, batch_size=BATCH_SIZE,
-                                          shuffle=True, num_workers=8, drop_last=False)
+                                          shuffle=True, num_workers=4, drop_last=False)
 
 # nl: left_image_path
 # nr: right_image_path
 nl, nr, folds, flags = parseList(root=LFW_DATA_DIR)
 testdataset = LFW(nl, nr)
 testloader = torch.utils.data.DataLoader(testdataset, batch_size=32,
-                                         shuffle=False, num_workers=8, drop_last=False)
+                                         shuffle=False, num_workers=4, drop_last=False)
 
 # define model
 net = model.MobileFacenet()
@@ -89,6 +97,8 @@ if multi_gpus:
     ArcMargin = DataParallel(ArcMargin)
 criterion = torch.nn.CrossEntropyLoss()
 
+summary(net, input_size=(3,112,96))
+
 
 best_acc = 0.0
 best_epoch = 0
@@ -101,6 +111,7 @@ for epoch in range(start_epoch, TOTAL_EPOCH+1):
     train_total_loss = 0.0
     total = 0
     since = time.time()
+    pbar = tqdm(total=len(trainloader), desc='Train model')
     for data in trainloader:
         img, label = data[0].cuda(), data[1].cuda()
         batch_size = img.size(0)
@@ -115,6 +126,11 @@ for epoch in range(start_epoch, TOTAL_EPOCH+1):
 
         train_total_loss += total_loss.item() * batch_size
         total += batch_size
+
+        train_total_loss = train_total_loss / total
+        pbar.set_description('Train loss: %06.4f' % (train_total_loss))
+        pbar.update(1)
+    pbar.close()
 
     train_total_loss = train_total_loss / total
     time_elapsed = time.time() - since
