@@ -109,6 +109,7 @@ for epoch in range(start_epoch, TOTAL_EPOCH+1):
     net.train()
 
     train_total_loss = 0.0
+    train_total_correct = 0.0
     total = 0
     since = time.time()
     pbar = tqdm(total=len(trainloader), desc='Train model')
@@ -126,16 +127,21 @@ for epoch in range(start_epoch, TOTAL_EPOCH+1):
 
         train_total_loss += total_loss.item() * batch_size
         total += batch_size
+        train_mean_loss = train_total_loss / total
 
-        train_total_loss = train_total_loss / total
-        pbar.set_description('Train loss: %06.4f' % (train_total_loss))
+        pred = output.argmax(dim=1, keepdim=True) # get the index of the max log-probability
+        batch_correct = pred.eq(label.view_as(pred)).sum().item()
+        train_total_correct += batch_correct
+        train_mean_correct = train_total_correct / total
+
+        pbar.set_description('Train loss: %06.4f - acc: %06.4f' % (train_mean_loss, train_mean_correct))
         pbar.update(1)
     pbar.close()
 
-    train_total_loss = train_total_loss / total
+    train_mean_loss = train_total_loss / total
     time_elapsed = time.time() - since
     loss_msg = '    total_loss: {:.4f} time: {:.0f}m {:.0f}s'\
-        .format(train_total_loss, time_elapsed // 60, time_elapsed % 60)
+        .format(train_mean_loss, time_elapsed // 60, time_elapsed % 60)
     _print(loss_msg)
 
     # test model on lfw
